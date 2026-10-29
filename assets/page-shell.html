@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{TITLE}}</title>
+  <link rel="icon" href="data:,">
+  <style>
+    :root {
+      --page: #f5f6f8;
+      --panel: #ffffff;
+      --ink: #17191d;
+      --muted: #69707d;
+      --line: #dfe2e7;
+      --accent: #1769e0;
+      --nav-width: 220px;
+      --spec-width: 520px;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body { margin: 0; overflow: hidden; background: var(--page); color: var(--ink); font: 14px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    button, input, select, textarea { font: inherit; }
+    .prd-layout { display: grid; height: 100vh; grid-template-columns: var(--nav-width) 6px minmax(380px, 1fr) 6px var(--spec-width); }
+    .prd-nav, .prd-workspace, .prd-spec { min-width: 0; overflow: auto; background: var(--panel); }
+    .prd-nav { display: flex; flex-direction: column; min-height: 0; overflow: hidden; padding: 24px 14px 18px; border-right: 1px solid var(--line); }
+    .prd-nav__title { flex-shrink: 0; margin: 0 8px 24px; font-size: 20px; line-height: 1.4; overflow-wrap: anywhere; }
+    .prd-nav__sections { flex: 1; min-height: 0; overflow: auto; }
+    .prd-nav__group { margin: 24px 8px 10px; color: var(--ink); font-size: 16px; font-weight: 700; overflow-wrap: anywhere; }
+    .prd-nav__section:first-child .prd-nav__group { margin-top: 0; }
+    .prd-nav__pages { margin: 0; padding: 0; list-style: none; }
+    .prd-nav__item { display: block; padding: 9px 10px 9px 18px; border-radius: 6px; color: var(--ink); font-size: 14px; text-decoration: none; overflow-wrap: anywhere; }
+    .prd-nav__footer { flex-shrink: 0; margin-top: 20px; padding: 16px 8px 0; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
+    .prd-nav__footer p { margin: 0; }
+    .prd-nav__footer p + p { margin-top: 6px; }
+    .prd-nav__footer time { display: inline-block; white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .prd-nav__item.is-active { background: #eaf1ff; color: var(--accent); font-weight: 650; }
+    .prd-resizer { position: relative; z-index: 3; cursor: col-resize; background: var(--page); touch-action: none; }
+    .prd-resizer::after { position: absolute; top: 0; bottom: 0; left: 2px; width: 1px; background: var(--line); content: ""; }
+    .prd-resizer:hover::after, .prd-resizer.is-dragging::after { width: 2px; background: var(--accent); }
+    .prd-workspace { display: flex; flex-direction: column; min-height: 0; padding: 28px; background: #eef0f3; }
+    .prototype-toolbar { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 12px 20px; flex-shrink: 0; margin-bottom: 20px; }
+    .prototype-toolbar__intro { flex: 1 1 200px; min-width: 0; overflow-wrap: anywhere; }
+    .prototype-toolbar h2 { margin: 0; font-size: 18px; }
+    .prototype-toolbar p { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+    .prototype-canvas { flex: 1; min-height: 0; overflow: auto; }
+    .prototype-viewport { position: relative; margin: 0 auto; }
+    .prototype-frame { position: absolute; top: 0; left: 0; transform-origin: top left; overflow: hidden; border: 1px solid #cbd0d8; background: var(--panel); box-shadow: 0 8px 24px rgba(20, 25, 35, .08); }
+    .prototype-screen { width: 100%; height: 100%; overflow: auto; }
+    .prd-spec { padding: 34px 38px 72px; border-left: 1px solid var(--line); }
+    .spec-header { margin-bottom: 32px; }
+    .spec-header h1 { margin: 0; font-size: 24px; letter-spacing: 0; }
+    .spec-header p { margin: 8px 0 0; color: var(--muted); }
+    .spec-section { padding: 24px 0; border-top: 1px solid var(--line); }
+    .spec-section h2 { margin: 0 0 14px; font-size: 17px; letter-spacing: 0; }
+    .spec-section h3 { margin: 18px 0 10px; font-size: 14px; }
+    .spec-section p, .spec-section li { color: #363b44; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 10px 12px; border: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { background: #f6f7f9; font-size: 12px; }
+    .placeholder { color: var(--muted); }
+    .empty-workspace { width: 100%; height: 100%; }
+    .app-frame { width: 375px; height: 812px; border-radius: 8px; }
+    .web-frame { width: 1200px; height: 760px; }
+    body.is-resizing { cursor: col-resize; user-select: none; }
+    @media (max-width: 1131px) {
+      body { overflow: auto; }
+      .prd-layout { display: block; height: auto; min-height: 100vh; }
+      .prd-nav, .prd-resizer { display: none; }
+      body[data-mode="prototype"] .prd-spec { display: none; }
+      body[data-mode="requirements"] .prd-workspace { display: none; }
+      .prd-workspace { height: 100vh; min-height: 0; padding: 16px; }
+      .prd-spec { min-height: 100vh; padding: 24px 18px 56px; border: 0; }
+    }
+  </style>
+</head>
+<body data-prd-page data-platform="{{PLATFORM}}" data-mode="{{MODE}}" data-document="{{DOCUMENT}}"{{PAGE_TYPE_ATTRIBUTE}}>
+  <main class="prd-layout">
+    <nav class="prd-nav" aria-label="需求导航">
+      <h1 class="prd-nav__title">{{PROJECT_TITLE}}</h1>
+      <div class="prd-nav__sections">
+        <section class="prd-nav__section" aria-labelledby="nav-group-current">
+          <h2 class="prd-nav__group" id="nav-group-current">{{NAV_GROUP}}</h2>
+          <ul class="prd-nav__pages">
+            <li><a class="prd-nav__item is-active" href="#spec" aria-current="page">{{TITLE}}</a></li>
+          </ul>
+        </section>
+      </div>
+      <footer class="prd-nav__footer">
+        <p>创建时间：<time datetime="{{CREATED_AT}}">{{CREATED_AT}}</time></p>
+        <p>更新时间：<time datetime="{{UPDATED_AT}}">{{UPDATED_AT}}</time></p>
+      </footer>
+    </nav>
+    <div class="prd-resizer" data-resizer="left" aria-hidden="true"></div>
+    <section class="prd-workspace" aria-label="需求工作区">
+{{MIDDLE}}
+    </section>
+    <div class="prd-resizer" data-resizer="right" aria-hidden="true"></div>
+    <aside class="prd-spec" id="spec">
+{{SPEC}}
+    </aside>
+  </main>
+  <script>
+    (function () {
+      var root = document.documentElement;
+      var body = document.body;
+      // Reserve 380px for the workspace and 12px for both separators.
+      function fitColumns(nav, spec) {
+        if (root.clientWidth < 1132) return;
+        var available = root.clientWidth - 392;
+        nav = Math.max(180, Math.min(nav, available - 360));
+        spec = Math.max(360, Math.min(spec, available - nav));
+        root.style.setProperty('--nav-width', nav + 'px');
+        root.style.setProperty('--spec-width', spec + 'px');
+      }
+      window.addEventListener('resize', function () {
+        var style = getComputedStyle(root);
+        fitColumns(parseFloat(style.getPropertyValue('--nav-width')), parseFloat(style.getPropertyValue('--spec-width')));
+      });
+      document.querySelectorAll('[data-resizer]').forEach(function (handle) {
+        handle.addEventListener('pointerdown', function (event) {
+          var startX = event.clientX;
+          var side = handle.getAttribute('data-resizer');
+          var startNav = parseFloat(getComputedStyle(root).getPropertyValue('--nav-width')) || 220;
+          var startSpec = parseFloat(getComputedStyle(root).getPropertyValue('--spec-width')) || 520;
+          handle.setPointerCapture(event.pointerId);
+          handle.classList.add('is-dragging');
+          body.classList.add('is-resizing');
+          function move(moveEvent) {
+            var delta = moveEvent.clientX - startX;
+            if (side === 'left') fitColumns(Math.min(startNav + delta, root.clientWidth - 392 - startSpec), startSpec);
+            if (side === 'right') fitColumns(startNav, startSpec - delta);
+          }
+          function stop() {
+            handle.classList.remove('is-dragging');
+            body.classList.remove('is-resizing');
+            handle.removeEventListener('pointermove', move);
+            handle.removeEventListener('pointerup', stop);
+            handle.removeEventListener('pointercancel', stop);
+          }
+          handle.addEventListener('pointermove', move);
+          handle.addEventListener('pointerup', stop);
+          handle.addEventListener('pointercancel', stop);
+        });
+      });
+    }());
+  </script>
+  <script id="prototype-preview">
+    (function () {
+      var frame = document.querySelector('.prototype-frame');
+      if (!frame) return;
+      var viewport = document.querySelector('.prototype-viewport');
+      var canvas = document.querySelector('.prototype-canvas');
+      function fitPreview() {
+        var scale = Math.min(1, canvas.clientWidth / frame.offsetWidth);
+        frame.style.transform = 'scale(' + scale + ')';
+        viewport.style.width = frame.offsetWidth * scale + 'px';
+        viewport.style.height = frame.offsetHeight * scale + 'px';
+      }
+      new ResizeObserver(fitPreview).observe(canvas);
+      fitPreview();
+    }());
+  </script>
+</body>
+</html>

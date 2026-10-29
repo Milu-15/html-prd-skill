@@ -1,0 +1,4 @@
+interface:
+  display_name: "产品需求全流程"
+  short_description: "创建和维护 App/Web HTML PRD，管理冲突与评审后变更"
+  default_prompt: "使用 $manage-product-requirements 创建或维护当前 App/Web 产品需求，并按项目阶段处理冲突、联动和验收。"
