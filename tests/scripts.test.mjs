@@ -248,38 +248,71 @@ test('preview fitting scales the frame without changing its product viewport', a
   vm.runInNewContext(script, { document: { querySelector: () => null } });
 });
 
-function changePage(root, headings) {
+function changePage(root, items) {
   const file = path.join(root, 'change.html');
   const result = run('scaffold_page.mjs', ['--output', file, '--platform', 'web', '--mode', 'requirements', '--document', 'page', '--page-type', 'change', '--title', '登录页面']);
   assert.equal(result.status, 0, result.stderr);
   let html = fs.readFileSync(file, 'utf8').replaceAll(' class="placeholder"', '').replace('待补充一句话变更摘要。', '增加短信登录入口。');
-  html = html.replace('</aside>', headings.map(heading => `<section class="spec-section"><h2>${heading}</h2><p>点击短信登录，进入验证码页面；返回时保留手机号。</p></section>`).join('') + '</aside>');
+  html = html.replace(/<ul class="change-list">[\s\S]*?<\/ul>/, `<ul class="change-list">${items.map(item => `<li>${item}</li>`).join('')}</ul>`);
   fs.writeFileSync(file, html);
   return file;
 }
 
-test('change pages accept only changed sections without filling unchanged chapters', t => {
+test('change pages accept direct change items without chapter headings', t => {
   const root = workspace(t);
   const baseline = completedPage(root);
   const before = fs.readFileSync(baseline, 'utf8');
-  const file = changePage(root, ['三、功能说明', '六、交互与跳转']);
+  const file = changePage(root, ['<strong>短信登录：</strong>点击短信登录，进入验证码页面。', '返回登录页时保留手机号。']);
   const html = fs.readFileSync(file, 'utf8');
   assert.match(html, /data-page-type="change"/);
   assert.match(html, /页面修改/);
-  assert.ok(!html.includes('一、页面概述'));
+  const spec = html.match(/<aside[^>]*id="spec"[^>]*>([\s\S]*?)<\/aside>/)[1];
+  assert.ok(!/<h2\b/.test(spec));
+  assert.match(spec, /<h1>登录页面<\/h1>/);
+  assert.equal([...spec.matchAll(/<li>/g)].length, 2);
   assert.equal(validate(root, true).status, 0);
   assert.equal(fs.readFileSync(baseline, 'utf8'), before);
 });
 
-for (const headings of [[], ['六、交互与跳转', '三、功能说明'], ['三、功能说明', '三、功能说明'], ['十、其他'], ['功能说明']]) {
-  test(`change pages reject empty or invalid chapter order: ${JSON.stringify(headings)}`, t => {
+for (const items of [[], [''], ['   '], ['<strong></strong>'], ['&nbsp;']]) {
+  test(`change pages reject missing or empty change items: ${JSON.stringify(items)}`, t => {
     const root = workspace(t);
-    changePage(root, headings);
+    changePage(root, items);
     const result = validate(root, true);
     assert.notEqual(result.status, 0);
-    assert.match(result.stderr, /changed sections in original numbered order/);
+    assert.match(result.stderr, /at least one non-empty change item/);
   });
 }
+
+test('change pages reject chapter headings even when change items exist', t => {
+  const root = workspace(t);
+  const file = changePage(root, ['新增短信登录入口。']);
+  fs.writeFileSync(file, fs.readFileSync(file, 'utf8').replace('<ul class="change-list">', '<h2>三、功能说明</h2><ul class="change-list">'));
+  assert.match(validate(root, true).stderr, /must not contain section headings/);
+});
+
+test('change pages also accept a consecutive ordered list', t => {
+  const root = workspace(t);
+  const file = changePage(root, ['新增短信登录入口。', '返回时保留手机号。']);
+  fs.writeFileSync(file, fs.readFileSync(file, 'utf8').replace('<ul class="change-list">', '<ol class="change-list">').replace('</ul>', '</ol>'));
+  assert.equal(validate(root, true).status, 0);
+});
+
+test('change scaffolds have item placeholders and no specification chapter headings in all modes', t => {
+  const root = workspace(t);
+  for (const platform of ['app', 'web']) for (const mode of ['prototype', 'requirements']) {
+    const output = path.join(root, `${platform}-${mode}-change.html`);
+    const result = run('scaffold_page.mjs', ['--output', output, '--platform', platform, '--mode', mode, '--document', 'page', '--page-type', 'change', '--title', '登录页面']);
+    assert.equal(result.status, 0, result.stderr);
+    const html = fs.readFileSync(output, 'utf8');
+    const spec = html.match(/<aside[^>]*id="spec"[^>]*>([\s\S]*?)<\/aside>/)[1];
+    assert.match(spec, /<ul class="change-list">[\s\S]*<li class="placeholder">/);
+    assert.ok(!/<h2\b/.test(spec));
+    assert.ok(!html.includes('原型说明'));
+  }
+  assert.equal(validate(root).status, 0);
+  assert.match(validate(root, true).stderr, /placeholder/);
+});
 
 test('new pages and legacy page markers retain the complete nine-section requirement', t => {
   const root = workspace(t);
@@ -294,10 +327,25 @@ test('new pages and legacy page markers retain the complete nine-section require
   assert.match(validate(root, true).stderr, /nine sections/);
 });
 
-test('optional comparison tables work and sparse change sections still validate supplied rule IDs', t => {
+test('new pages reject removed chapter headings even when all section content remains', t => {
   const root = workspace(t);
-  const file = changePage(root, ['五、业务规则']);
-  const html = fs.readFileSync(file, 'utf8').replace('<h2>五、业务规则</h2>', '<h2>五、业务规则</h2><table><tr><td>普通用户</td><td>每日一次</td></tr><tr><td>R-LOGIN-01</td><td>每日一次</td></tr></table>');
+  const file = completedPage(root);
+  const html = fs.readFileSync(file, 'utf8');
+  for (const marker of [' data-page-type="new"', '']) {
+    const withoutHeadings = html.replace(' data-page-type="new"', marker)
+      .replace(/<h2>[^<]*<\/h2>/g, '');
+    assert.equal([...withoutHeadings.matchAll(/<section class="spec-section">/g)].length, 9);
+    fs.writeFileSync(file, withoutHeadings);
+    const result = validate(root, true);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /nine sections/);
+  }
+});
+
+test('optional comparison tables in change items still validate supplied rule IDs', t => {
+  const root = workspace(t);
+  const file = changePage(root, ['调整登录次数：<table><tr><td>普通用户</td><td>每日一次</td></tr><tr><td>R-LOGIN-01</td><td>每日一次</td></tr></table>']);
+  const html = fs.readFileSync(file, 'utf8');
   fs.writeFileSync(file, html);
   assert.equal(validate(root, true).status, 0);
   fs.writeFileSync(file, html.replace('R-LOGIN-01', 'R-LOGIN-1'));

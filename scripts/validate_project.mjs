@@ -123,13 +123,18 @@ function validateFile(file, projectRoot, strict) {
         errors.push(`${relative}: invalid page type "${pageType}"`);
       } else if (pageType === 'new' && (headings.length !== 9 || chapterIndexes.some((chapter, index) => chapter !== index))) {
         errors.push(`${relative}: page document must contain nine sections in order`);
-      } else if (pageType === 'change' && (!headings.length || chapterIndexes.some((chapter, index) => chapter < 0 || (index > 0 && chapter <= chapterIndexes[index - 1])))) {
-        errors.push(`${relative}: change page must contain changed sections in original numbered order`);
+      } else if (pageType === 'change') {
+        const bodyContent = spec.replace(/<header\b[^>]*>[\s\S]*?<\/header>/gi, '');
+        const items = [...bodyContent.matchAll(/<li\b[^>]*>([\s\S]*?)<\/li>/gi)];
+        if (!items.some(item => item[1].replace(/<[^>]*>|&nbsp;|&#160;|&#xA0;/gi, '').trim())) {
+          errors.push(`${relative}: change page must contain at least one non-empty change item`);
+        }
+        if (/<h2\b/i.test(bodyContent)) errors.push(`${relative}: change page must not contain section headings`);
       }
       for (const [chapter, prefix] of [[2, 'F'], [4, 'R']]) {
         const index = chapterIndexes.indexOf(chapter);
         const seen = new Set();
-        const rows = [...(sections[index] || '').matchAll(/<tr\b[^>]*>\s*<td\b[^>]*>([\s\S]*?)<\/td>/gi)];
+        const rows = [...(pageType === 'change' ? spec : sections[index] || '').matchAll(/<tr\b[^>]*>\s*<td\b[^>]*>([\s\S]*?)<\/td>/gi)];
         for (const row of rows) {
           const number = row[1].replace(/<[^>]*>/g, '').trim();
           if (!number.startsWith(`${prefix}-`)) continue;
